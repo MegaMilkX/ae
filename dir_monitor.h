@@ -1,6 +1,8 @@
 #ifndef DIR_MONITOR_H
 #define DIR_MONITOR_H
 
+#include <mutex>
+#include <queue>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -25,13 +27,25 @@ inline std::string ThisModuleDir()
     return dir.substr(0, dir.find_last_of('\\')) + "\\";
 }
 
-class DirMonitor;
-inline DWORD __stdcall DirMonitorThread(LPVOID);
-
 class DirMonitor
 {
 public:
-  virtual void OnModify(const std::wstring& filename) = 0;
+  enum MsgType
+  {
+      MODIFY
+  };
+
+  struct Msg
+  {
+    Msg(MsgType type, const std::string& filename)
+    : type(type), filename(filename)
+    {
+    }
+    MsgType type;
+    std::string filename;
+  };
+
+  virtual void OnModify(const std::string& filename) = 0;
 
   DWORD threadId;
   HANDLE thread;
@@ -43,7 +57,7 @@ public:
     thread = CreateThread(
       NULL,
       0,
-      &DirMonitorThread,
+      &DirMonitor::DirMonitorThread,
       this,
       0,
       &threadId
@@ -80,6 +94,22 @@ public:
     
   }
   
+  void Poll()
+  {
+    sync_queue.lock();
+    while(!queue.empty())
+    {
+        Msg& m = queue.front();
+        if(m.type == MODIFY)
+        {
+            OnModify(m.filename);
+        }
+        queue.pop();
+    }
+    sync_queue.unlock();
+  }
+  
+private:
   void Run()
   {
     ZeroMemory(&overlapped, sizeof(OVERLAPPED));
@@ -90,7 +120,7 @@ public:
         hDir,
         &buffer[0],
         buffer.size(),
-        TRUE,
+        FALSE,
         FILE_NOTIFY_CHANGE_LAST_WRITE,
         &dwBytes,
         &overlapped,
@@ -102,8 +132,7 @@ public:
     
     SleepEx(INFINITE, TRUE);
   }
-  
-private:
+
   static VOID CALLBACK ChangeCallback(DWORD errCode, DWORD numBytes, LPOVERLAPPED lpOverlapped)
   {
     if(!numBytes)
@@ -118,7 +147,10 @@ private:
       FILE_NOTIFY_INFORMATION& fni = (FILE_NOTIFY_INFORMATION&)*pBase;
       if(fni.Action == FILE_ACTION_MODIFIED)
       {
-        mon->OnModify(std::wstring(fni.FileName, fni.FileNameLength / sizeof(wchar_t)));
+        mon->sync_queue.lock();
+        std::wstring wstr(fni.FileName, fni.FileNameLength / sizeof(wchar_t));
+        mon->queue.push(Msg(MODIFY, std::string(wstr.begin(), wstr.end())));
+        mon->sync_queue.unlock();
       }
       if (!fni.NextEntryOffset)
         break;
@@ -127,19 +159,23 @@ private:
     
     mon->Run();
   }
+  
+  static DWORD __stdcall DirMonitorThread(LPVOID lpThreadParameter)
+  {
+    DirMonitor* mon = (DirMonitor*)lpThreadParameter;
+      
+    mon->Run();
+      
+    return 0;
+  }
 
+  std::mutex sync_queue;
+  std::queue<Msg> queue;
   HANDLE hDir;
   std::vector<BYTE> buffer;
   OVERLAPPED overlapped;
 };
 
-DWORD __stdcall DirMonitorThread(LPVOID lpThreadParameter)
-{
-  DirMonitor* mon = (DirMonitor*)lpThreadParameter;
-  
-  mon->Run();
-  
-  return 0;
-}
+
 
 #endif

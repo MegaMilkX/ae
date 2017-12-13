@@ -13,6 +13,25 @@ void print_vector(const std::vector<T>& data)
     }
 }
 
+HMODULE ThisModuleHandle()
+{
+  HMODULE h = NULL;
+  GetModuleHandleExW(
+    GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+    reinterpret_cast<LPCWSTR>(&ThisModuleHandle),
+    &h
+  );
+  return h;
+}
+
+std::string ThisModuleDir()
+{
+    char buf[MAX_PATH];
+    DWORD len = GetModuleFileNameA(ThisModuleHandle(), buf, MAX_PATH);
+    std::string dir(buf, buf + len);
+    return dir.substr(0, dir.find_last_of('\\'));
+}
+
 HANDLE hDir;
 std::vector<BYTE> buffer;
 
@@ -75,7 +94,7 @@ int main(int argc, char** argv)
     CreateDirectoryA("data", NULL);
     
     hDir = CreateFileA(
-        "data",
+        ThisModuleDir().c_str(),
         FILE_LIST_DIRECTORY,
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL,

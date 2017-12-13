@@ -18,9 +18,9 @@ void print_vector(const std::vector<T>& data)
 class DirMon : public DirMonitor
 {
 public:
-  void OnModify(const std::wstring& filename)
+  void OnModify(const std::string& filename)
   {
-    std::wcout << filename << L" modified" << std::endl;
+    std::cout << filename << " modified" << std::endl;
   }
 };
 
@@ -30,7 +30,11 @@ int main(int argc, char** argv)
     
     DirMon dirMon;
     dirMon.Init();
-    dirMon.Run();
+    
+    while(true)
+    {
+      dirMon.Poll();
+    }
     
     std::getchar();
     

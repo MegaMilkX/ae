@@ -26,14 +26,33 @@ inline std::string ThisModuleDir()
 }
 
 class DirMonitor;
-inline void DirMonitorThread(DirMonitor*);
+inline DWORD __stdcall DirMonitorThread(LPVOID);
 
 class DirMonitor
 {
 public:
   virtual void OnModify(const std::wstring& filename) = 0;
 
+  DWORD threadId;
+  HANDLE thread;
   bool Init()
+  {
+    if(!InitImpl())
+      return false;
+    
+    thread = CreateThread(
+      NULL,
+      0,
+      &DirMonitorThread,
+      this,
+      0,
+      &threadId
+    );
+    
+    return true;
+  }
+  
+  bool InitImpl()
   {
     buffer.resize(sizeof(FILE_NOTIFY_INFORMATION) * 10);
     
@@ -114,9 +133,13 @@ private:
   OVERLAPPED overlapped;
 };
 
-void DirMonitorThread(DirMonitor* mon)
+DWORD __stdcall DirMonitorThread(LPVOID lpThreadParameter)
 {
+  DirMonitor* mon = (DirMonitor*)lpThreadParameter;
   
+  mon->Run();
+  
+  return 0;
 }
 
 #endif

@@ -37,6 +37,7 @@ public:
 
   struct Msg
   {
+    Msg() {}
     Msg(MsgType type, const std::string& filename)
     : type(type), filename(filename)
     {
@@ -96,17 +97,27 @@ public:
   
   void Poll()
   {
-    sync_queue.lock();
-    while(!queue.empty())
+    while(true)
     {
-        Msg& m = queue.front();
-        if(m.type == MODIFY)
-        {
-            OnModify(m.filename);
-        }
+      sync_queue.lock();
+      Msg m;
+      if(!queue.empty())
+      {
+        m = queue.front();
         queue.pop();
+      }
+      else
+      {
+        sync_queue.unlock();
+        break;
+      }
+      sync_queue.unlock();
+      
+      if(m.type == MODIFY)
+      {
+          OnModify(m.filename);
+      }
     }
-    sync_queue.unlock();
   }
   
 private:

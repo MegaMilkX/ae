@@ -1,13 +1,19 @@
 #include <iostream>
+#include <stdlib.h>
 #include "../aurora.h"
 
+AuroraCore* core;
 
 class Gameplay : public GameState
 {
 public:
+  virtual ~Gameplay() 
+  {
+    
+  }
   void Update()
   {
-    std::cout << "test" << std::endl;
+    std::cout << "uiu7uiiu" << std::endl;
   }
   
   void Cleanup()
@@ -16,12 +22,35 @@ public:
   }
 };
 
-GameState* aeInit()
+
+
+void* operator new(size_t n)
 {
-    return new Gameplay();
+  if(!core)
+  {
+    return malloc(n);
+  }
+  else
+  {
+    return core->Malloc(n);
+  }
 }
 
-void aeUpdate()
+void operator delete(void* p)
 {
-  std::cout << "qwe" << std::endl;
+  if(!core)
+    free(p);
+  else
+    core->Free(p);
+}
+
+GameState* aeInit(AuroraCore* c)
+{
+  core = c;
+  return new Gameplay();
+}
+
+void aeUpdate(GameState* state)
+{
+  state->Update();
 }

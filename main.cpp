@@ -6,9 +6,38 @@
 
 #include "dir_monitor.h"
 
-typedef void (*FuncAeUpdate)( );
-FuncAeUpdate aeUpdate = 0;
+#include "aurora.h"
+
+class Core : public AuroraCore
+{
+public:
+  Core()
+   : cur(0)
+  {
+    mem_block.resize(50000000);
+  }
+  virtual void* Malloc(size_t n)
+  {
+    void* p = mem_block.data() + cur;
+    cur += n;
+    return p;
+  }
+  virtual void Free(void* p)
+  {
+    
+  }
+private:
+  std::vector<unsigned char> mem_block;
+  size_t cur;
+};
+
+typedef GameState*(*FuncAeInit)(AuroraCore*);
+typedef void (*FuncAeUpdate)(GameState*);
+FuncAeInit _aeInit = 0;
+FuncAeUpdate _aeUpdate = 0;
 HMODULE GameDll;
+GameState* state;
+Core* core;
 
 template<typename T>
 void print_vector(const std::vector<T>& data)
@@ -23,7 +52,8 @@ void UnloadGameDll()
 {
   FreeLibrary(GameDll);
   GameDll = 0;
-  aeUpdate = 0;
+  _aeInit = 0;
+  _aeUpdate = 0;
 }
 
 bool LoadGameDll()
@@ -42,16 +72,20 @@ bool LoadGameDll()
       return false;
     }
     
-    aeUpdate = (FuncAeUpdate)GetProcAddress(GameDll, "aeUpdate");
-    if(!aeUpdate)
+    _aeInit = (FuncAeInit)GetProcAddress(GameDll, "aeInit");
+    _aeUpdate = (FuncAeUpdate)GetProcAddress(GameDll, "aeUpdate");
+    if(!_aeUpdate || !_aeInit)
     {
       DWORD err = GetLastError();
-      std::cout << "Failed to load update func: " << err << std::endl;
+      std::cout << "Failed to load functions: " << err << std::endl;
       return false;
     }
+    
+    state = _aeInit(core);
+    return true;
   }
   
-  return true;
+  return false;
 }
 
 class DirMon : public DirMonitor
@@ -75,6 +109,7 @@ int main(int argc, char** argv)
 {
     print_vector(std::vector<char*>(argv, argv + argc));
     
+    core = new Core();
     LoadGameDll();
     
     DirMon dirMon;
@@ -83,7 +118,8 @@ int main(int argc, char** argv)
     while(true)
     {
       dirMon.Poll();
-      aeUpdate();
+      state->Update();
+      //_aeUpdate(state);
     }
     
     std::getchar();
